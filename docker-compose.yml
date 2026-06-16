@@ -1,0 +1,192 @@
+services:
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: llm-forge-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infra/nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - gateway
+    networks:
+      - llmforge-net
+
+  gateway:
+    build:
+      context: .
+      dockerfile: ./apps/gateway/Dockerfile
+    container_name: llm-forge-gateway
+    environment:
+      - GATEWAY_PORT=3000
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://llmforge:password@postgres:5432/llmforge
+      - EMBEDDING_SERVICE_URL=http://embedding:8000
+      - OLLAMA_URL=http://ollama:11434
+      - API_KEYS=test-key-1,test-key-2
+    depends_on:
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_started
+      embedding:
+        condition: service_started
+      ollama:
+        condition: service_healthy
+    expose:
+      - "3000"
+    networks:
+      - llmforge-net
+
+  workers:
+    build:
+      context: .
+      dockerfile: ./apps/workers/Dockerfile
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://llmforge:password@postgres:5432/llmforge
+      - OLLAMA_URL=http://ollama:11434
+      - WORKER_CONCURRENCY=2
+      - MICRO_BATCH_WINDOW_MS=50
+    depends_on:
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_started
+      ollama:
+        condition: service_healthy
+    expose:
+      - "3002"
+    deploy:
+      replicas: 2
+    networks:
+      - llmforge-net
+
+  embedding:
+    build:
+      context: .
+      dockerfile: ./apps/embedding/Dockerfile
+    container_name: llm-forge-embedding
+    expose:
+      - "8000"
+    volumes:
+      - embedding-models:/root/.cache/huggingface
+    networks:
+      - llmforge-net
+
+  eval:
+    build:
+      context: .
+      dockerfile: ./apps/eval/Dockerfile
+    container_name: llm-forge-eval
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://llmforge:password@postgres:5432/llmforge
+      - OLLAMA_URL=http://ollama:11434
+    depends_on:
+      - redis
+      - postgres
+      - ollama
+    profiles:
+      - eval
+    networks:
+      - llmforge-net
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: llm-forge-ollama
+    expose:
+      - "11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - llmforge-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: llm-forge-redis
+    command: redis-server --maxmemory 2gb --maxmemory-policy allkeys-lru
+    expose:
+      - "6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - llmforge-net
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: llm-forge-postgres
+    environment:
+      - POSTGRES_USER=llmforge
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=llmforge
+    expose:
+      - "5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/migrations:/docker-entrypoint-initdb.d:ro
+    networks:
+      - llmforge-net
+
+  prometheus:
+    image: prom/prometheus:v2.50.0
+    container_name: llm-forge-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/prometheus/rules:/etc/prometheus/rules:ro
+    networks:
+      - llmforge-net
+
+  grafana:
+    image: grafana/grafana:10.3.0
+    container_name: llm-forge-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+    volumes:
+      - ./infra/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./infra/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    networks:
+      - llmforge-net
+
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: llm-forge-loki
+    expose:
+      - "3100"
+    volumes:
+      - ./infra/loki/loki.yml:/etc/loki/local-config.yaml:ro
+    networks:
+      - llmforge-net
+
+  promtail:
+    image: grafana/promtail:2.9.0
+    container_name: llm-forge-promtail
+    volumes:
+      - /var/log:/var/log:ro
+      - ./infra/promtail/promtail.yml:/etc/promtail/config.yml:ro
+    networks:
+      - llmforge-net
+
+networks:
+  llmforge-net:
+    driver: bridge
+
+volumes:
+  redis-data:
+  postgres-data:
+  ollama-models:
+  embedding-models:
+  grafana-data:

@@ -1,0 +1,35 @@
+# Node modules
+node_modules/
+
+# Environment configurations and secrets
+.env
+.env.local
+
+# SSL certificates
+infra/nginx/ssl/cert.pem
+infra/nginx/ssl/key.pem
+
+# Next.js build output
+.next/
+
+# Compilation / Build outputs
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Evaluation reports
+apps/eval/reports/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+bun.lockb
+.pnpm-debug.log*
+.agents/
+docs/
+# OS specific files
+.DS_Store
+Thumbs.db
