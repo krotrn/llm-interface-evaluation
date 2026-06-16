@@ -1,0 +1,13 @@
+[project]
+name = "embedding"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "sentence-transformers",
+    "onnxruntime",
+    "prometheus-client",
+]
