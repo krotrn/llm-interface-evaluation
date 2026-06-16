@@ -10,4 +10,5 @@ dependencies = [
     "sentence-transformers",
     "onnxruntime",
     "prometheus-client",
+    "pydantic>=2.13.4",
 ]

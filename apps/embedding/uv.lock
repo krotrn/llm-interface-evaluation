@@ -134,6 +134,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "onnxruntime" },
     { name = "prometheus-client" },
+    { name = "pydantic" },
     { name = "sentence-transformers" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -143,6 +144,7 @@ requires-dist = [
     { name = "fastapi" },
     { name = "onnxruntime" },
     { name = "prometheus-client" },
+    { name = "pydantic", specifier = ">=2.13.4" },
     { name = "sentence-transformers" },
     { name = "uvicorn", extras = ["standard"] },
 ]

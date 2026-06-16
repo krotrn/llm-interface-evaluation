@@ -23,6 +23,8 @@
 **/*.log
 **/*.pid
 **/*.lock
+!**/uv.lock
+!**/bun.lock
 **/coverage
 **/.nyc_output
 
