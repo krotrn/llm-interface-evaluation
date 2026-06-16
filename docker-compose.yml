@@ -121,7 +121,7 @@ services:
       - llmforge-net
 
   postgres:
-    image: postgres:16-alpine
+    image: ankane/pgvector:latest
     container_name: llm-forge-postgres
     environment:
       - POSTGRES_USER=llmforge

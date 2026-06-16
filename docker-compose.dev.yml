@@ -1,20 +1,16 @@
 services:
   nginx:
-    # Disable Nginx in development by scaling it to 0
     deploy:
       replicas: 0
 
   gateway:
-    # Map the gateway port directly to the host for dev access
     ports:
       - "${GATEWAY_PORT:-3000}:3000"
-    # Mount source directory for hot reloading
     volumes:
       - ./apps/gateway:/app
-      - /app/node_modules # prevent local node_modules from overriding container node_modules
+      - /app/node_modules
 
   workers:
-    # Mount source directory for workers hot reloading
     volumes:
       - ./apps/workers:/app
       - /app/node_modules

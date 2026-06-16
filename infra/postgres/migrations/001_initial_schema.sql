@@ -1,6 +1,24 @@
+CREATE EXTENSION IF NOT EXISTS vector;
+
 -- ============================================================
 -- GATEWAY TABLES
 -- ============================================================
+
+CREATE TABLE IF NOT EXISTS cache_entries (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  prompt_hash     CHAR(64) NOT NULL,
+  embedding       vector(384) NOT NULL,
+  model           VARCHAR(100) NOT NULL,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at      TIMESTAMPTZ NOT NULL,
+  hit_count       INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_cache_entries_embedding ON cache_entries
+  USING ivfflat (embedding vector_cosine_ops) WITH (lists = 10);
+CREATE INDEX IF NOT EXISTS idx_cache_entries_expires ON cache_entries(expires_at);
+
+-- ---------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS inference_log (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
