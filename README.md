@@ -1,6 +1,6 @@
-# llm-forge
+# llm-interface-evaluation
 
-`llm-forge` is a self-hosted LLM inference gateway and evaluation platform. It provides semantic caching, BullMQ queuing, circuit-breaker fallback, SSE streaming, and full Prometheus/Grafana observability, combined with a CI-integrated multi-model evaluation platform.
+`llm-interface-evaluation` is a self-hosted LLM inference gateway and evaluation platform. It provides semantic caching, BullMQ queuing, circuit-breaker fallback, SSE streaming, and full Prometheus/Grafana observability, combined with a CI-integrated multi-model evaluation platform.
 
 ## Initial Setup
 
@@ -8,7 +8,7 @@ Follow these steps to set up and run the platform locally:
 
 1. **Clone the Repository**
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/krotrn/llm-interface-evaluation
    cd llm-gateway
    ```
 

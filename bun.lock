@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "llm-forge",
+      "name": "llm-interface-evaluation",
     },
     "apps/eval": {
       "name": "eval",

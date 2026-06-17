@@ -3,7 +3,7 @@
 # Exit immediately if a command exits with a non-zero status
 set -e
 
-CONTAINER_NAME="llm-forge-ollama"
+CONTAINER_NAME="llm-interface-evaluation-ollama"
 
 # Models to pull
 MODELS=(

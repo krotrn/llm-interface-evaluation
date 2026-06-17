@@ -1,5 +1,5 @@
 {
-  "name": "llm-forge",
+  "name": "llm-interface-evaluation",
   "private": true,
   "workspaces": [
     "apps/gateway",
