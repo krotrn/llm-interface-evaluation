@@ -7,8 +7,8 @@ print("Model loaded successfully.")
 
 def embed(text: str) -> list[float]:
     """Generate embedding for a single text."""
-    return model.encode(text).tolist()
+    return model.encode(text, normalize_embeddings=True).tolist()
 
 def embed_batch(texts: list[str]) -> list[list[float]]:
     """Generate embeddings for a batch of texts."""
-    return model.encode(texts).tolist()
+    return model.encode(texts, normalize_embeddings=True).tolist()
