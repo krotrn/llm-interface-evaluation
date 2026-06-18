@@ -48,9 +48,9 @@ app = FastAPI(
 # Custom exception handler for validation errors
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    logger.warning("Validation error on request: %s", exc.errors())
+    logger.warning(f"Validation error on request: {exc.errors()}")
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content={
             "error": "Validation Error",
             "details": jsonable_encoder(exc.errors())
@@ -158,7 +158,7 @@ async def get_embedding(request: EmbedRequest, req: Request):
         )
     except Exception as e:
         llmforge_embedding_requests_total.labels(endpoint="embed", status="error").inc()
-        logger.exception("Error generating single embedding (request_id=%s): %s", req.state.request_id, e)
+        logger.exception(f"Error generating single embedding (request_id={req.state.request_id}): {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Embedding generation failed"
