@@ -25,7 +25,10 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 # Copy built artifacts and dependencies from builder stage
-COPY --from=builder /app /app
+COPY --from=builder --chown=node:node /app /app
+
+# Run as non-root node user
+USER node
 
 # Expose gateway port
 EXPOSE 3000

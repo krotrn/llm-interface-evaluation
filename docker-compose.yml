@@ -21,10 +21,10 @@ services:
     environment:
       - GATEWAY_PORT=3000
       - REDIS_URL=redis://redis:6379
-      - DATABASE_URL=postgresql://llmforge:password@postgres:5432/llmforge
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-llmforge}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-llmforge}
       - EMBEDDING_SERVICE_URL=http://embedding:8000
       - OLLAMA_URL=http://ollama:11434
-      - API_KEYS=test-key-1,test-key-2
+      - API_KEYS=${API_KEYS:-test-key-1,test-key-2}
     depends_on:
       redis:
         condition: service_started
@@ -36,6 +36,14 @@ services:
         condition: service_healthy
     expose:
       - "3000"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
     networks:
       - llmforge-net
 
@@ -45,9 +53,9 @@ services:
       dockerfile: ./apps/workers/Dockerfile
     environment:
       - REDIS_URL=redis://redis:6379
-      - DATABASE_URL=postgresql://llmforge:password@postgres:5432/llmforge
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-llmforge}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-llmforge}
       - OLLAMA_URL=http://ollama:11434
-      - WORKER_CONCURRENCY=2
+      - WORKER_CONCURRENCY=1
       - MICRO_BATCH_WINDOW_MS=50
     depends_on:
       redis:
@@ -60,6 +68,13 @@ services:
       - "3002"
     deploy:
       replicas: 2
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
     networks:
       - llmforge-net
 
@@ -71,7 +86,7 @@ services:
     expose:
       - "8000"
     volumes:
-      - embedding-models:/root/.cache/huggingface
+      - embedding-models:/home/appuser/.cache/huggingface
     networks:
       - llmforge-net
 
@@ -82,7 +97,7 @@ services:
     container_name: llm-interface-evaluation-eval
     environment:
       - REDIS_URL=redis://redis:6379
-      - DATABASE_URL=postgresql://llmforge:password@postgres:5432/llmforge
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-llmforge}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-llmforge}
       - OLLAMA_URL=http://ollama:11434
     depends_on:
       - redis
@@ -90,6 +105,8 @@ services:
       - ollama
     profiles:
       - eval
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - llmforge-net
 
@@ -124,9 +141,9 @@ services:
     image: ankane/pgvector:latest
     container_name: llm-interface-evaluation-postgres
     environment:
-      - POSTGRES_USER=llmforge
-      - POSTGRES_PASSWORD=password
-      - POSTGRES_DB=llmforge
+      - POSTGRES_USER=${POSTGRES_USER:-llmforge}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - POSTGRES_DB=${POSTGRES_DB:-llmforge}
     expose:
       - "5432"
     volumes:
