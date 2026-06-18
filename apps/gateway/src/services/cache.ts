@@ -94,3 +94,106 @@ export async function writeCache(
 
   return entryId;
 }
+
+/**
+ * Looks up a prompt embedding in the semantic cache.
+ * 
+ * 1. Queries PostgreSQL for the closest entry of the specified model within expiration time
+ *    using negative inner product (<#>) on pgvector, matching the HNSW index design.
+ * 2. Checks if the similarity score (-distance) meets CACHE_SIM_THRESHOLD.
+ * 3. If the threshold is met, fetches the full prompt, response and metadata from Redis.
+ * 4. Asynchronously increments hit count in both Postgres and Redis.
+ * 
+ * Returns the cached response object with similarity if hit, or null if miss.
+ */
+export async function lookupCache(
+  pgPool: pg.Pool,
+  redis: Redis,
+  embedding: number[] | Float32Array,
+  model: string
+): Promise<{
+  prompt: string;
+  response: string;
+  model: string;
+  created_at: string;
+  similarity: number;
+} | null> {
+  const threshold = parseFloat(process.env.CACHE_SIM_THRESHOLD || '0.92');
+  const embeddingStr = `[${Array.from(embedding).join(',')}]`;
+
+  logger.debug({ model }, 'Starting semantic cache lookup');
+
+  // Query Postgres for closest vector
+  let entryId: string;
+  let similarity: number;
+
+  try {
+    const res = await pgPool.query(
+      `SELECT id, - (embedding <#> $1::vector) AS similarity
+       FROM cache_entries
+       WHERE model = $2
+         AND expires_at > NOW()
+       ORDER BY embedding <#> $1::vector ASC
+       LIMIT 1`,
+      [embeddingStr, model]
+    );
+
+    if (res.rows.length === 0) {
+      logger.debug({ model }, 'No cache entries found for model');
+      return null;
+    }
+
+    const row = res.rows[0];
+    similarity = parseFloat(row.similarity);
+    entryId = row.id.toString();
+
+    logger.debug({ entryId, similarity, threshold }, 'Closest cache entry evaluated');
+
+    if (similarity < threshold) {
+      logger.debug({ entryId, similarity, threshold }, 'Cache miss: similarity below threshold');
+      return null;
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error({ err }, `Failed Postgres cache query: ${message}`);
+    return null;
+  }
+
+  // Fetch response from Redis
+  try {
+    const cacheKey = `llmforge:cache:${entryId}`;
+    const cached = await redis.hgetall(cacheKey);
+
+    if (!cached || !cached.response || !cached.prompt || !cached.model || !cached.created_at) {
+      logger.warn({ entryId }, 'Cache index hit in Postgres, but Redis key is missing fields or expired');
+      return null;
+    }
+
+    // Increment hit counts asynchronously (fire-and-forget)
+    redis.hincrby(cacheKey, 'hit_count', 1).catch((err) => {
+      logger.error({ err, entryId }, 'Failed to increment Redis cache hit count');
+    });
+    
+    pgPool.query(
+      `UPDATE cache_entries SET hit_count = hit_count + 1 WHERE id = $1`,
+      [entryId]
+    ).catch((err) => {
+      logger.error({ err, entryId }, 'Failed to increment Postgres cache hit count');
+    });
+
+    logger.info({ entryId, similarity }, 'Semantic cache hit');
+
+    return {
+      prompt: cached.prompt,
+      response: cached.response,
+      model: cached.model,
+      created_at: cached.created_at,
+      similarity,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error({ err, entryId }, `Failed Redis cache lookup: ${message}`);
+    return null;
+  }
+}
+
