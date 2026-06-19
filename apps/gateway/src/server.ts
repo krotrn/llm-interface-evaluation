@@ -8,7 +8,7 @@ import { logger } from './services/logger.js';
 
 export async function buildApp() {
   const app = Fastify({
-    logger,
+    loggerInstance: logger,
     disableRequestLogging: true, // We can customize request logging if needed
   });
 

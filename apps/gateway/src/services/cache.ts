@@ -197,3 +197,48 @@ export async function lookupCache(
   }
 }
 
+/**
+ * Flushes all semantic cache entries from PostgreSQL and Redis.
+ * Deletes all rows from cache_entries table and removes all corresponding llmforge:cache:* Redis keys.
+ */
+export async function flushCache(
+  pgPool: pg.Pool,
+  redis: Redis
+): Promise<void> {
+  logger.info('Flushing semantic cache...');
+
+  // 1. Delete all rows from Postgres cache_entries
+  try {
+    const res = await pgPool.query('DELETE FROM cache_entries');
+    logger.info({ rowCount: res.rowCount }, 'Cleared Postgres cache_entries table');
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error({ err }, `Failed to clear Postgres cache_entries: ${message}`);
+    throw err;
+  }
+
+  // 2. Scan and delete keys matching llmforge:cache:* from Redis
+  try {
+    let cursor = '0';
+    let totalDeleted = 0;
+    do {
+      const [nextCursor, keys] = await redis.scan(
+        cursor,
+        'MATCH',
+        'llmforge:cache:*',
+        'COUNT',
+        100
+      );
+      cursor = nextCursor;
+      if (keys.length > 0) {
+        await redis.del(...keys);
+        totalDeleted += keys.length;
+      }
+    } while (cursor !== '0');
+    logger.info({ totalDeleted }, 'Cleared Redis cache keys');
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error({ err }, `Failed to clear Redis cache keys: ${message}`);
+    throw err;
+  }
+}
