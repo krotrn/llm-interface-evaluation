@@ -13,6 +13,7 @@ WORKDIR /app
 
 # Enable bytecode compilation
 ENV UV_COMPILE_BYTECODE=1
+ENV UV_LINK_MODE=copy
 
 # Pre-create the cache and app directories
 RUN mkdir -p /home/appuser/.cache/huggingface /home/appuser/.cache/uv /app && \
