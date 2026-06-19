@@ -1,15 +1,25 @@
 import Fastify from 'fastify';
 import sensible from '@fastify/sensible';
+import crypto from 'crypto';
 import redisPlugin from './plugins/redis.js';
 import postgresPlugin from './plugins/postgres.js';
 import authPlugin from './plugins/auth.js';
 import healthRoutes from './routes/health.js';
+import adminRoutes from './routes/admin.js';
 import { logger } from './services/logger.js';
 
 export async function buildApp() {
   const app = Fastify({
     loggerInstance: logger,
     disableRequestLogging: true, // We can customize request logging if needed
+    genReqId: (req) => {
+      const header = req.headers['x-request-id'];
+      if (header) {
+        const id = Array.isArray(header) ? header[0] : header;
+        if (id) return id;
+      }
+      return crypto.randomUUID();
+    },
   });
 
   // Register standard HTTP error helpers first
@@ -24,8 +34,15 @@ export async function buildApp() {
   // Register Postgres connection pool plugin
   await app.register(postgresPlugin);
 
+  // Add global hook to inject X-Request-Id header on all responses
+  app.addHook('onSend', async (request, reply, payload) => {
+    reply.header('X-Request-Id', request.id);
+    return payload;
+  });
+
   // Register Route handlers
   await app.register(healthRoutes);
+  await app.register(adminRoutes);
 
   return app;
 }

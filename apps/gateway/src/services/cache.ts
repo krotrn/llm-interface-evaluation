@@ -225,13 +225,15 @@ export async function lookupCache(
 export async function flushCache(
   pgPool: pg.Pool,
   redis: Redis
-): Promise<void> {
+): Promise<number> {
   logger.info('Flushing semantic cache...');
+  let rowCount = 0;
 
   // 1. Delete all rows from Postgres cache_entries
   try {
     const res = await pgPool.query('DELETE FROM cache_entries');
-    logger.info({ rowCount: res.rowCount }, 'Cleared Postgres cache_entries table');
+    rowCount = res.rowCount || 0;
+    logger.info({ rowCount }, 'Cleared Postgres cache_entries table');
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error({ err }, `Failed to clear Postgres cache_entries: ${message}`);
@@ -262,6 +264,8 @@ export async function flushCache(
     logger.error({ err }, `Failed to clear Redis cache keys: ${message}`);
     throw err;
   }
+
+  return rowCount;
 }
 
 /**
