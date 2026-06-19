@@ -95,6 +95,21 @@ export async function writeCache(
   return entryId;
 }
 
+// Local stub for Prometheus counters (to be integrated with prom-client in P1.3.6)
+export const cacheHitsCounter = {
+  value: 0,
+  inc() {
+    this.value++;
+  }
+};
+
+export const cacheMissesCounter = {
+  value: 0,
+  inc() {
+    this.value++;
+  }
+};
+
 /**
  * Looks up a prompt embedding in the semantic cache.
  * 
@@ -140,6 +155,7 @@ export async function lookupCache(
 
     if (res.rows.length === 0) {
       logger.debug({ model }, 'No cache entries found for model');
+      cacheMissesCounter.inc();
       return null;
     }
 
@@ -151,11 +167,13 @@ export async function lookupCache(
 
     if (similarity < threshold) {
       logger.debug({ entryId, similarity, threshold }, 'Cache miss: similarity below threshold');
+      cacheMissesCounter.inc();
       return null;
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error({ err }, `Failed Postgres cache query: ${message}`);
+    cacheMissesCounter.inc();
     return null;
   }
 
@@ -166,6 +184,7 @@ export async function lookupCache(
 
     if (!cached || !cached.response || !cached.prompt || !cached.model || !cached.created_at) {
       logger.warn({ entryId }, 'Cache index hit in Postgres, but Redis key is missing fields or expired');
+      cacheMissesCounter.inc();
       return null;
     }
 
@@ -182,6 +201,7 @@ export async function lookupCache(
     });
 
     logger.info({ entryId, similarity }, 'Semantic cache hit');
+    cacheHitsCounter.inc();
 
     return {
       prompt: cached.prompt,
@@ -193,6 +213,7 @@ export async function lookupCache(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error({ err, entryId }, `Failed Redis cache lookup: ${message}`);
+    cacheMissesCounter.inc();
     return null;
   }
 }
@@ -241,4 +262,91 @@ export async function flushCache(
     logger.error({ err }, `Failed to clear Redis cache keys: ${message}`);
     throw err;
   }
+}
+
+/**
+ * Returns cache statistics: size (Postgres rows), hitCount (global), missCount (global).
+ */
+export async function getCacheStats(
+  pgPool: pg.Pool,
+  redis: Redis
+): Promise<{ size: number; hitCount: number; missCount: number }> {
+  try {
+    const res = await pgPool.query('SELECT COUNT(*) FROM cache_entries');
+    const size = parseInt(res.rows[0].count, 10);
+    return {
+      size,
+      hitCount: cacheHitsCounter.value,
+      missCount: cacheMissesCounter.value,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error({ err }, `Failed to get cache stats: ${message}`);
+    throw err;
+  }
+}
+
+/**
+ * Deletes expired cache entries from Postgres and deletes corresponding Redis keys.
+ */
+export async function evictExpiredCache(
+  pgPool: pg.Pool,
+  redis: Redis
+): Promise<number> {
+  logger.debug('Running background cache eviction...');
+
+  try {
+    // 1. Delete expired rows from Postgres and return their IDs
+    const res = await pgPool.query(
+      `DELETE FROM cache_entries 
+       WHERE expires_at < NOW() 
+       RETURNING id`
+    );
+
+    const expiredIds = res.rows.map((row) => row.id.toString());
+
+    if (expiredIds.length > 0) {
+      logger.info({ count: expiredIds.length }, 'Found expired cache entries in Postgres. Evicting from Redis...');
+
+      // 2. Delete corresponding keys from Redis in a pipeline
+      const pipeline = redis.pipeline();
+      for (const id of expiredIds) {
+        pipeline.del(`llmforge:cache:${id}`);
+      }
+      
+      const pipelineResults = await pipeline.exec();
+      if (pipelineResults) {
+        for (const [err] of pipelineResults) {
+          if (err) throw err;
+        }
+      }
+
+      logger.info({ count: expiredIds.length }, 'Successfully evicted expired cache entries from Postgres and Redis');
+    } else {
+      logger.debug('No expired cache entries found to evict');
+    }
+
+    return expiredIds.length;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error({ err }, `Cache eviction job failed: ${message}`);
+    throw err;
+  }
+}
+
+/**
+ * Starts the background eviction interval.
+ */
+export function startCacheEvictionJob(
+  pgPool: pg.Pool,
+  redis: Redis,
+  intervalMs: number = 300000
+): NodeJS.Timeout {
+  logger.info({ intervalMs }, 'Starting background cache eviction job...');
+  const interval = setInterval(() => {
+    evictExpiredCache(pgPool, redis).catch((err) => {
+      logger.error({ err }, 'Cache eviction interval execution failed');
+    });
+  }, intervalMs);
+  return interval;
 }
